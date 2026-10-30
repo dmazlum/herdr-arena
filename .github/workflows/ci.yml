@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a PR supersedes the old run — don't burn a runner on the stale one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: tests (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS too: the mod runs there, with BSD tools and a symlinked /tmp.
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Mod files parse
+        run: for f in app/mods/arena/*.js app/mods/arena/lib/*.js; do node --check "$f" || exit 1; done
+      - name: Mod manifest and keys are JSON
+        run: node -e "for (const f of ['app/mods/arena/mod.json', 'app/keys.json']) JSON.parse(require('fs').readFileSync(f, 'utf8'))"
+      # The git tests make throwaway repositories and worktrees in a temporary folder.
+      - name: Test
+        run: npm test

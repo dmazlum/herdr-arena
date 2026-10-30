@@ -1,0 +1,5 @@
+{
+  "global": {
+    "cmd-shift-a": "mod.open:arena"
+  }
+}

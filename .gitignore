@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+.env
+.env.*
+CLAUDE.md
+# Written by herdr-app on check/load
+app/mods/*/gpui-kit.d.ts
+app/mods/*/jsconfig.json

@@ -1,0 +1,22 @@
+{
+  "name": "herdr-arena",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Give one task to several coding agents at once in Herdr, each in its own worktree. Keep the best, or fuse them.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmazlum/herdr-arena.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dmazlum/herdr-arena/issues"
+  },
+  "homepage": "https://github.com/dmazlum/herdr-arena#readme",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
