@@ -6,7 +6,7 @@ Give one task to several coding agents at once in [Herdr](https://herdr.dev), ea
 own git worktree. See what each one actually built, keep the best, or fuse the strongest
 parts into one result.
 
-![Arena](app/preview.png)
+![Arena](preview.png)
 
 Requires the **Herdr desktop app 0.1.9+** and **git**. Any agent in Herdr's program list
 works; answers are read from the transcript for **Claude Code** and from the screen for the
@@ -34,13 +34,17 @@ others.
 
 ## Install
 
+In Herdr, ask your agent to add `github.com/dmazlum/herdr-arena` (it's listed at
+[herdr.dev/mods](https://herdr.dev/mods)): it reads [`RECIPE.md`](RECIPE.md) and every file,
+copies `mods/arena`, merges [`keys.json`](keys.json) and checks the mod. Or by hand:
+
 ```sh
 git clone https://github.com/dmazlum/herdr-arena
-cp -R herdr-arena/app/mods/arena ~/.config/herdr-app/mods/
+cp -R herdr-arena/mods/arena ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/arena
 ```
 
-Then merge [`app/keys.json`](app/keys.json) into `~/.config/herdr-app/keys.json`:
+Then merge [`keys.json`](keys.json) into `~/.config/herdr-app/keys.json`:
 
 | Key / command | What it does |
 | --- | --- |
@@ -52,7 +56,7 @@ While developing, link the folder instead of copying it, and Herdr reloads the m
 every save:
 
 ```sh
-ln -s "$PWD/herdr-arena/app/mods/arena" ~/.config/herdr-app/mods/arena
+ln -s "$PWD/herdr-arena/mods/arena" ~/.config/herdr-app/mods/arena
 ```
 
 ## How a run looks
@@ -79,7 +83,7 @@ git restore --source=<ref> --staged --worktree -- :/
 Arena never deletes those refs; remove them with `git update-ref -d` when you no longer
 need them.
 
-![Side by side](app/side-by-side.png)
+![Side by side](docs/side-by-side.png)
 
 ## Statuses
 
@@ -103,7 +107,7 @@ A blue dot means the lane finished while you weren't looking.
   message that way start empty; paste the task yourself.
 - Worktrees isolate the repository only, not databases, ports or other shared services.
 
-[`app/RECIPE.md`](app/RECIPE.md) describes the mod in detail.
+[`RECIPE.md`](RECIPE.md) describes the mod in detail.
 
 ## Development
 

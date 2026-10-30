@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { diffRows } from "../app/mods/arena/lib/diff.js";
+import { diffRows } from "../mods/arena/lib/diff.js";
 
 const kinds = (rows) => rows.map((r) => r.kind + (r.number ?? ""));
 

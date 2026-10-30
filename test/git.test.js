@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, symlinkSync, mkdirSync, unlinkSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as G from "../app/mods/arena/lib/git.js";
+import * as G from "../mods/arena/lib/git.js";
 
 // The mod's exec, over child_process.
 const exec = async (command, args = [], { cwd } = {}) => {

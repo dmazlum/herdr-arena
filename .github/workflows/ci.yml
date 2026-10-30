@@ -29,9 +29,9 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Mod files parse
-        run: for f in app/mods/arena/*.js app/mods/arena/lib/*.js; do node --check "$f" || exit 1; done
+        run: for f in mods/arena/*.js mods/arena/lib/*.js; do node --check "$f" || exit 1; done
       - name: Mod manifest and keys are JSON
-        run: node -e "for (const f of ['app/mods/arena/mod.json', 'app/keys.json']) JSON.parse(require('fs').readFileSync(f, 'utf8'))"
+        run: node -e "for (const f of ['mods/arena/mod.json', 'keys.json']) JSON.parse(require('fs').readFileSync(f, 'utf8'))"
       # The git tests make throwaway repositories and worktrees in a temporary folder.
       - name: Test
         run: npm test

@@ -5,5 +5,5 @@ node_modules/
 .env.*
 CLAUDE.md
 # Written by herdr-app on check/load
-app/mods/*/gpui-kit.d.ts
-app/mods/*/jsconfig.json
+mods/*/gpui-kit.d.ts
+mods/*/jsconfig.json

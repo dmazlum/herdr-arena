@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveLaneStatus, isSettled, formatDuration, shellIsBack, laneSig, needsRead, readSettled, READ_RETRIES, READ_RETRY_MS } from "../app/mods/arena/lib/status.js";
-import { slugify, titleFromPrompt, laneLabel, nextIndex, nextMemberId, laneBranch, worktreePath, splitCommand, laneArgv, activeAfterRemoval } from "../app/mods/arena/lib/names.js";
-import { fusionModeFor, mightInlineDiffs, diffsFit, utf8Length, answersPrompt, codePrompt, codeInstructions } from "../app/mods/arena/lib/fusion.js";
-import { lastAnswer, screenTail, claudeProjectDir } from "../app/mods/arena/lib/transcript.js";
-import { parseNumstat } from "../app/mods/arena/lib/git.js";
+import { resolveLaneStatus, isSettled, formatDuration, shellIsBack, laneSig, needsRead, readSettled, READ_RETRIES, READ_RETRY_MS } from "../mods/arena/lib/status.js";
+import { slugify, titleFromPrompt, laneLabel, nextIndex, nextMemberId, laneBranch, worktreePath, splitCommand, laneArgv, activeAfterRemoval } from "../mods/arena/lib/names.js";
+import { fusionModeFor, mightInlineDiffs, diffsFit, utf8Length, answersPrompt, codePrompt, codeInstructions } from "../mods/arena/lib/fusion.js";
+import { lastAnswer, screenTail, claudeProjectDir } from "../mods/arena/lib/transcript.js";
+import { parseNumstat } from "../mods/arena/lib/git.js";
 
 const live = (extra = {}) => ({ state: "live", turn: 1, ...extra });
 
