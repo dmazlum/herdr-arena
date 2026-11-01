@@ -1,6 +1,6 @@
 {
   "name": "herdr-arena",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Give one task to several coding agents at once in Herdr, each in its own worktree. Keep the best, or fuse them.",
