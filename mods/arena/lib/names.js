@@ -89,6 +89,23 @@ export function splitCommand(text) {
 }
 
 /**
+ * Agents whose trailing argument is not a first message take it with a flag:
+ * `opencode merhaba` opens a folder named "merhaba".
+ */
+const PROMPT_FLAGS = { opencode: "--prompt" };
+
+/**
+ * How a lane's agent gets its task: `{ argv, task }` for `tab.new`. Herdr
+ * appends `task` as the last argument, which most agents read as their first
+ * message; the ones in PROMPT_FLAGS get it in argv with their flag instead.
+ */
+export function agentWithTask(agentArgv, task) {
+  const flag = PROMPT_FLAGS[String(agentArgv[0] ?? "").split("/").pop()];
+  if (!flag || !task || agentArgv.includes(flag)) return { argv: agentArgv, task };
+  return { argv: [...agentArgv, flag, task], task: undefined };
+}
+
+/**
  * The argv a lane starts with. Setup commands run first, in the lane's
  * folder; `exec "$@"` then replaces that shell with the agent, so the task
  * Herdr appends lands as the agent's first message.

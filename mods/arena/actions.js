@@ -6,8 +6,8 @@
 import { exec, hc, home, readTextFile, run, terminals, agents, notify } from "herdr";
 import { getRun, saveRun, updateRun, updateMember, dropRun } from "./store.js";
 import * as G from "./lib/git.js";
-import { laneArgv, laneBranch, laneLabel, nextIndex, nextMemberId, slugify, worktreePath } from "./lib/names.js";
-import { lastAnswer, claudeProjectDir, screenTail } from "./lib/transcript.js";
+import { agentWithTask, laneArgv, laneBranch, laneLabel, nextIndex, nextMemberId, slugify, worktreePath } from "./lib/names.js";
+import { lastAnswer, claudeProjectDir, screenTail, codexLastAnswer, codexSessionMeta, opencodeSessionFor, opencodeLastAnswer } from "./lib/transcript.js";
 import { answersPrompt, codePrompt, fusionModeFor, mightInlineDiffs, diffsFit, utf8Length, MAX_TASK_BYTES } from "./lib/fusion.js";
 
 /** Lane checkouts go next to the worktree mod's: ~/.herdr/worktrees/<repo>/<branch with dashes>. */
@@ -61,12 +61,13 @@ async function startMember(r, member, task, { checkout, start, branch, root = fa
   }
   let made;
   try {
+    const agent = agentWithTask(member.agent.run, task);
     made = await appDo("tab.new", {
       name: tabName(r, member),
       space: r.space,
       folder: dir,
-      argv: laneArgv(member.agent.run, checkout ? r.setup : []),
-      task,
+      argv: laneArgv(agent.argv, checkout ? r.setup : []),
+      ...(agent.task === undefined ? {} : { task: agent.task }),
     });
   } catch (error) {
     if (worktree) await G.removeWorktree(exec, r.repo, worktree, branch).catch(() => undefined);
@@ -184,6 +185,98 @@ async function claudeTranscript(address) {
   return found.stdout.split("\n").find(Boolean) ?? null;
 }
 
+const isCodex = (member, agent) => /codex/i.test(agent?.app ?? "") || /(^|\/)codex$/.test(member.agent?.run?.[0] ?? "");
+
+/**
+ * A Codex lane's rollout: the newest ~/.codex/sessions file that began in the
+ * lane's folder after the lane started. Codex keeps no pid → session map, so
+ * the folder is the link: a lane sharing its folder with another Codex lane
+ * of the run has none, since their files can't be told apart.
+ */
+async function codexTranscript(r, member) {
+  if (!member.dir) return null;
+  const sharing = r.members.some((m) => m.id !== member.id && m.dir === member.dir && isCodex(m, null));
+  if (sharing) return null;
+  const minutes = Math.ceil((Date.now() - (member.created ?? Date.now())) / 60000) + 2;
+  // Recently written rollouts that mention the folder as a cwd; the first line says whose it is.
+  const found = await exec("find", [`${home()}/.codex/sessions`, "-name", "rollout-*.jsonl", "-mmin", `-${minutes}`]);
+  const files = found.stdout.split("\n").filter(Boolean);
+  if (!files.length) return null;
+  const hits = await exec("grep", ["-l", "-F", `"cwd":${JSON.stringify(member.dir)}`, ...files]);
+  let best = null;
+  for (const file of hits.stdout.split("\n").filter(Boolean)) {
+    const head = await exec("head", ["-n", "1", file]);
+    const meta = codexSessionMeta(head.stdout);
+    // A little slack: the clocks are the same, but the lane's start is noted after tab.new answers.
+    if (meta?.cwd === member.dir && meta.at >= (member.created ?? 0) - 10000 && (!best || meta.at > best.at)) best = { file, at: meta.at };
+  }
+  return best?.file ?? null;
+}
+
+const found = new Map();
+
+/**
+ * Where a program lives, for `exec`. Mods run with a login shell's PATH, but
+ * agent installers often add theirs only in the interactive rc
+ * (~/.opencode/bin in .zshrc), where Herdr starts the agents themselves. So:
+ * PATH, then the usual install folders, then the person's interactive shell.
+ * @returns {Promise<string | null>}
+ */
+async function locate(bin) {
+  if (bin.includes("/")) return bin;
+  if (found.has(bin)) return found.get(bin);
+  const executable = async (path) => Boolean(path) && (await exec("test", ["-x", path]).catch(() => null))?.code === 0;
+  const lastPath = (out) => String(out ?? "").split("\n").map((l) => l.trim()).filter((l) => l.startsWith("/")).pop();
+  let path = lastPath((await exec("sh", ["-c", 'command -v -- "$1"', "sh", bin]).catch(() => null))?.stdout);
+  if (!(await executable(path))) {
+    path = null;
+    for (const dir of [`${home()}/.${bin}/bin`, `${home()}/.local/bin`, "/opt/homebrew/bin", "/usr/local/bin"]) {
+      if (await executable(`${dir}/${bin}`)) { path = `${dir}/${bin}`; break; }
+    }
+  }
+  if (!path && /^[\w.+-]+$/.test(bin)) {
+    const shell = (await exec("sh", ["-c", 'printf %s "$SHELL"']).catch(() => null))?.stdout?.trim();
+    if (shell) {
+      const candidate = lastPath((await exec(shell, ["-ic", `command -v ${bin}`]).catch(() => null))?.stdout);
+      if (await executable(candidate)) path = candidate;
+    }
+  }
+  if (path) found.set(bin, path);
+  return path ?? null;
+}
+
+const isOpencode = (member, agent) => /opencode/i.test(agent?.app ?? "") || /(^|\/)opencode$/.test(member.agent?.run?.[0] ?? "");
+
+/**
+ * An OpenCode lane's answer, from its own CLI: the session it started in the
+ * lane's folder, exported as JSON. Like Codex, a folder shared with another
+ * OpenCode lane of the run can't tell their sessions apart.
+ * @returns {Promise<string | null | undefined>} undefined when it can't be read
+ */
+async function opencodeReply(runId, member) {
+  const r = getRun(runId);
+  if (!r || !member.dir) return undefined;
+  if (r.members.some((m) => m.id !== member.id && m.dir === member.dir && isOpencode(m, null))) return undefined;
+  const bin = await locate(member.agent?.run?.[0] || "opencode");
+  if (!bin) return undefined;
+  let id = member.opencode ?? null;
+  if (!id) {
+    const list = await exec(bin, ["session", "list", "-n", "20", "--format", "json"], { cwd: member.dir });
+    if (list.code !== 0) return undefined;
+    id = opencodeSessionFor(list.stdout, member.dir, (member.created ?? 0) - 10000);
+    if (!id) return undefined;
+    updateMember(runId, member.id, (m) => { m.opencode = id; });
+  }
+  const got = await exec(bin, ["session", "export", id], { cwd: member.dir });
+  return got.code === 0 ? opencodeLastAnswer(got.stdout) : undefined;
+}
+
+/** The tail of a transcript, read with `answer`; null when it can't be read. */
+async function readTail(path, answer) {
+  const tail = await exec("tail", ["-n", "600", path]);
+  return tail.code === 0 ? answer(tail.stdout) : undefined;
+}
+
 /**
  * The lane's latest answer: { state: "ready", text, screen? } or { state: "error" }.
  * The transcript path is kept on the member, so the answer stays readable
@@ -192,6 +285,22 @@ async function claudeTranscript(address) {
 export async function laneReply(runId, member) {
   try {
     const agent = agents().find((a) => a.address === member.terminal);
+    if (isCodex(member, agent)) {
+      let path = member.codex ?? null;
+      if (!path) {
+        const r = getRun(runId);
+        path = r ? await codexTranscript(r, member).catch(() => null) : null;
+        if (path) updateMember(runId, member.id, (m) => { m.codex = path; });
+      }
+      if (path) {
+        const text = await readTail(path, codexLastAnswer);
+        if (text !== undefined) return { state: "ready", text: text ?? "" };
+      }
+    }
+    if (isOpencode(member, agent)) {
+      const text = await opencodeReply(runId, member).catch(() => undefined);
+      if (text !== undefined) return { state: "ready", text: text ?? "" };
+    }
     if (isClaude(member, agent)) {
       let path = member.claude ?? null;
       const live = await claudeTranscript(member.terminal).catch(() => null);

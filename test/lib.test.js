@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveLaneStatus, isSettled, formatDuration, shellIsBack, laneSig, needsRead, readSettled, READ_RETRIES, READ_RETRY_MS } from "../mods/arena/lib/status.js";
-import { slugify, titleFromPrompt, laneLabel, nextIndex, nextMemberId, laneBranch, worktreePath, splitCommand, laneArgv, activeAfterRemoval } from "../mods/arena/lib/names.js";
+import { slugify, titleFromPrompt, laneLabel, nextIndex, nextMemberId, laneBranch, worktreePath, splitCommand, laneArgv, agentWithTask, activeAfterRemoval } from "../mods/arena/lib/names.js";
 import { fusionModeFor, mightInlineDiffs, diffsFit, utf8Length, answersPrompt, codePrompt, codeInstructions } from "../mods/arena/lib/fusion.js";
-import { lastAnswer, screenTail, claudeProjectDir } from "../mods/arena/lib/transcript.js";
+import { lastAnswer, screenTail, claudeProjectDir, codexLastAnswer, codexSessionMeta, opencodeSessionFor, opencodeLastAnswer } from "../mods/arena/lib/transcript.js";
 import { parseNumstat } from "../mods/arena/lib/git.js";
 
 const live = (extra = {}) => ({ state: "live", turn: 1, ...extra });
@@ -134,6 +134,13 @@ test("setup commands run before the agent, which gets the task", () => {
   assert.deepEqual(argv.slice(3), ["arena-setup", "claude", "--model", "haiku"]);
 });
 
+test("an agent that reads its argument as a folder gets the task with its flag", () => {
+  assert.deepEqual(agentWithTask(["claude"], "hi"), { argv: ["claude"], task: "hi" });
+  assert.deepEqual(agentWithTask(["opencode"], "hi"), { argv: ["opencode", "--prompt", "hi"], task: undefined });
+  assert.deepEqual(agentWithTask(["/opt/bin/opencode", "--model", "x"], "hi"), { argv: ["/opt/bin/opencode", "--model", "x", "--prompt", "hi"], task: undefined });
+  assert.deepEqual(agentWithTask(["opencode", "--prompt", "fixed"], "hi"), { argv: ["opencode", "--prompt", "fixed"], task: "hi" });
+});
+
 test("fusion works on code only when every lane has a worktree and something changed", () => {
   const changed = { files: 2 }, none = { files: 0 };
   assert.equal(fusionModeFor([{ hasWorktree: true, diff: changed }, { hasWorktree: true, diff: none }]), "code");
@@ -219,6 +226,57 @@ test("a turn without text yet, and no turn at all", () => {
 
 test("screen tails drop trailing blank lines", () => {
   assert.equal(screenTail("a\nb  \n\n\n", 1), "b");
+});
+
+test("screen tails drop the agent's input line and the status lines under it", () => {
+  const codex = "› merhaba\n• Merhaba! Nasıl yardımcı olabilirim?\n\n  Worked for 13s\n\n› Ask Codex to do anything\n\n  GPT · ~/app\n  ← for agents · ? for shortcuts\n";
+  assert.equal(screenTail(codex), "› merhaba\n• Merhaba! Nasıl yardımcı olabilirim?\n\n  Worked for 13s");
+  const boxed = "● Done.\n╭──────╮\n│ ❯    │\n╰──────╯\n  ? for shortcuts";
+  assert.equal(screenTail(boxed), "● Done.");
+  // An input line far above the bottom is part of the conversation.
+  assert.equal(screenTail("› task\n1\n2\n3\n4\n5\n6\n7"), "› task\n1\n2\n3\n4\n5\n6\n7");
+});
+
+const codexItem = (item) => JSON.stringify({ type: "event_msg", payload: { type: "item_completed", item } });
+const said = (text) => codexItem({ type: "UserMessage", content: [{ type: "text", text }] });
+const answered = (text) => codexItem({ type: "AgentMessage", content: [{ type: "Text", text }] });
+
+test("codex answers are the newest agent message of the last turn", () => {
+  assert.equal(codexLastAnswer([said("hi"), answered("Hello!")].join("\n")), "Hello!");
+  assert.equal(codexLastAnswer([said("hi"), answered("one"), answered("two")].join("\n")), "two");
+  assert.equal(codexLastAnswer([said("hi"), answered("old"), said("again")].join("\n")), "");
+  assert.equal(codexLastAnswer(JSON.stringify({ type: "session_meta", payload: { cwd: "/x" } })), null);
+  assert.equal(codexLastAnswer('{"type":"event_msg","payload":{"type":"item_compl'), null);
+});
+
+test("an opencode lane's session is the newest one in its folder since it started", () => {
+  const list = JSON.stringify([
+    { id: "ses_old", directory: "/w/lane", created: 50 },
+    { id: "ses_other", directory: "/w/other", created: 300 },
+    { id: "ses_new", directory: "/w/lane", created: 200 },
+    { id: "ses_mid", directory: "/w/lane", created: 150 },
+  ]);
+  assert.equal(opencodeSessionFor(list, "/w/lane", 100), "ses_new");
+  assert.equal(opencodeSessionFor(list, "/w/lane", 250), null);
+  assert.equal(opencodeSessionFor("nope", "/w/lane", 0), null);
+});
+
+test("opencode answers are the text of the last turn, not its reasoning", () => {
+  const user = (text) => ({ type: "user", text });
+  const reply = (...content) => ({ type: "assistant", content });
+  const out = (messages) => JSON.stringify({ info: {}, messages });
+  assert.equal(opencodeLastAnswer(out([user("hi"), reply({ type: "reasoning", text: "think" }, { type: "text", text: "Merhaba!" }), { type: "idle" }])), "Merhaba!");
+  assert.equal(opencodeLastAnswer(out([user("hi"), reply({ type: "text", text: "a" }), reply({ type: "tool" })])), "a");
+  assert.equal(opencodeLastAnswer(out([user("hi"), reply({ type: "text", text: "old" }), user("again")])), "");
+  assert.equal(opencodeLastAnswer(out([])), null);
+  assert.equal(opencodeLastAnswer("not json"), null);
+});
+
+test("a codex rollout says where and when it began", () => {
+  const line = JSON.stringify({ type: "session_meta", timestamp: "2026-11-01T19:19:10.055Z", payload: { cwd: "/w/lane", timestamp: "2026-11-01T19:19:09.742Z" } });
+  assert.deepEqual(codexSessionMeta(line), { cwd: "/w/lane", at: Date.parse("2026-11-01T19:19:09.742Z") });
+  assert.equal(codexSessionMeta(said("hi")), null);
+  assert.equal(codexSessionMeta("not json"), null);
 });
 
 test("claude project folders replace separators", () => {
