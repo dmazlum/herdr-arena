@@ -52,11 +52,12 @@ Then merge [`keys.json`](keys.json) into `~/.config/herdr-app/keys.json`:
 | `⌘↵` in the launcher | Start the run |
 | Esc | Close the launcher, a picker or the diff |
 
-While developing, link the folder instead of copying it, and Herdr reloads the mod on
-every save:
+While developing, copy the folder again after each change; Herdr reloads the mod within
+a second. Copy, don't symlink: Herdr doesn't reload a symlinked mod folder when its files
+change.
 
 ```sh
-ln -s "$PWD/herdr-arena/mods/arena" ~/.config/herdr-app/mods/arena
+cp -R herdr-arena/mods/arena ~/.config/herdr-app/mods/
 ```
 
 ## Updates
